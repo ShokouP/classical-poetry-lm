@@ -1,58 +1,111 @@
-# classical-poetry-lm · 古典诗文写作模型（Qwen3.5）
+# 🏮 一张消费级显卡，炼出一个会写唐诗宋词的 AI
 
-用 **Qwen3.5-4B / 9B** 在 **Windows 原生环境（RTX 5090 Laptop 24GB）** 上训练一个会写 **近体诗、词、明清古文、骚体赋** 的中文模型。
+> **TL;DR**：用 **RTX 5090 Laptop（24GB）** 在 **Windows 原生环境**上，把 Qwen3.5 训成会写**近体诗、词、明清古文、骚体赋**的模型。
+> 全程开源：**30 万首真诗**训练数据 → CPT → SFT → **5 家最强模型当老师**生成古典散文 → 偏好对齐 → 量化部署，**总花费不到 ¥150 API 费**。
 
-训练路线：**领域 CPT（继续预训练）→ 指令 SFT（含真实诗拟作、真实诗话评点、散文仿写、扩写）→ 自动评估（体裁/押韵/抄袭）→ 量化部署（Ollama）**。
+[![GitHub stars](https://img.shields.io/github/stars/ShokouP/classical-poetry-lm?style=social)](https://github.com/ShokouP/classical-poetry-lm)
+[![HuggingFace](https://img.shields.io/badge/🤗-Models%20%26%20Data-yellow)](https://huggingface.co/Shokou1)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)]()
+[![GPU](https://img.shields.io/badge/GPU-24GB%20Laptop-red)]()
+
+**它写出来的东西**（七律 · 登高怀古）：
+
+> 九嵏峰頂倚危欄，萬里江天盡目寒。
+> 歸鴈不隨秦帝駕，殘蟬猶訴漢宮歡。
+> 山川不改英雄恨，日月無情壯士肝。
+> 回首故人多老矣，不堪煙雨寄征鞍。
+
+![gallery](reports/figures/gallery.png)
+
+## 📚 目录
+
+- [为什么值得看](#-为什么值得看)
+- [三分钟上手](#-三分钟上手)
+- [模型 & 数据](#-模型--数据)
+- [怎么训的](#-怎么训的)
+- [多 Teacher 古典散文](#-多-teacher-古典散文)
+- [评测结果](#-评测结果)
+- [踩过的坑](#-踩过的坑)
+- [精选作品集](#-精选作品集)
+- [HuggingFace / GitHub](#-huggingface--github)
+
+## 🎯 为什么值得看
+
+| 亮点 | 说明 |
+|---|---|
+| **真诗驱动** | 30.9 万首唐诗宋词直接构造指令数据，**按作者切分**防背诵 |
+| **5 家老师当外挂** | GLM-5.3 / K3.1-Pro / K3 / K2.8 / DeepSeek-V4.1 生成古典散文，**2,780 条过滤后入训** |
+| **自动评测三件套** | 体裁合规 + **9 韵部簇**（86.5% 一致性）+ **1,709 万 8-gram 抄袭指纹** |
+| **Windows 可用** | 避开 QLoRA（4bit 慢 36 倍），bf16 LoRA + 定长 padding，**9B seq768 稳跑 22GB** |
+| **全部开源** | 数据构造 / 训练 / 评测 / GGUF 导出 / Ollama 部署脚本一条龙 |
 
 > 精选作品集： [`reports/qwen3.5-9B-诗文专家模型选.pdf`](reports/qwen3.5-9B-诗文专家模型选.pdf)（18 页，含编者评点）
 
-## HuggingFace
+## ⚡ 三分钟上手
 
-- 模型（4B v2）: https://huggingface.co/Shokou1/qwen3.5-poetry-4b-v2
-- 模型（9B v1）: https://huggingface.co/Shokou1/qwen3.5-poetry-9b-v1
-- 数据集: https://huggingface.co/datasets/Shokou1/classical-poetry-sft
+```bash
+# Ollama（推荐）
+ollama pull poetry-9b-v1   # 5.2GB Q4_K_M，写完即可用
+ollama run poetry-9b-v1 "【唐·王维·五绝·山水】请作五言绝句一首，写山中月夜。"
+```
 
-> 模型权重在 HF 上以 40MB 分片存放（网络原因），仓库内附 `merge_chunks.py` 一键合并。
+```python
+# Transformers + LoRA
+from peft import PeftModel
+from transformers import AutoTokenizer, Qwen3_5ForCausalLM
+
+tok = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-9B", trust_remote_code=True)
+model = Qwen3_5ForCausalLM.from_pretrained("Qwen/Qwen3.5-9B", dtype="bfloat16", device_map="auto")
+model = PeftModel.from_pretrained(model, "Shokou1/qwen3.5-poetry-9b-v1")
+```
+
+## 📊 模型 & 数据
+
+| 模型 | 基座 | 训练 | 量化 | Ollama |
+|---|---|---|---|---|
+| `poetry-4b-v2` | Qwen3.5-4B | CPT 300 + SFT 600（含扩写） | Q4_K_M 2.58GB | ✅ |
+| `poetry-9b-v1` | Qwen3.5-9B | SFT 600（seq768, r32） | Q4_K_M 5.24GB | ✅ |
+| `poetry-9b-v2` | Qwen3.5-9B | SFT 280（+散文 7.6k） | — | 待导出 |
+| `poetry-9b-dpo` | Qwen3.5-9B | SFT + DPO 200 | — | 训练中 |
+
+| 数据 | 规模 |
+|---|---:|
+| 全唐诗 / 全宋诗 | 56,589 / 252,852 首 |
+| 宋词 / 元曲 | 21,053 / 11,057 |
+| 诗话 / 词话 / 文评 | 1,133 / 358 / 426 万字 |
+| 明清散文（明文海等） | 4,168 篇 / 354 万字 |
+| 四库别集 | 1,279 部 / 471.6MB |
+| **CPT 语料** | **382,191 条 / 6,033 万字** |
+| **SFT v4** | **46,261 条** |
+| **古典散文（多 teacher）** | **2,780 条** |
+| **DPO 偏好对** | **987 对**（正例来自 5 家强模型） |
+
+## 🔬 怎么训的
+
+```
+公开语料 6,033 万字
+   ↓ CPT（LoRA r64, seq2048 packing, 300 步）
+Qwen3.5-4B 适应古典文风（loss 3.57 → 2.36）
+   ↓ 构造 40,813 条指令数据（真诗拟作 15k + 真诗话 13k + teacher 评点 9k + 扩写）
+   ↓ SFT（LoRA, 定长 padding, 600 步）
+   ↓ 追加 5 家 teacher 古典散文 7,653 条（加权）
+SFT v4（46,261 条）
+   ↓ DPO（5 家强模型正例 + 自模型负例，缓存参考 logps）
+偏好对齐模型
+   ↓ 合并 → GGUF Q4_K_M
+Ollama / DSH / llama.cpp
+```
 
 ![pipeline](reports/figures/fig_pipeline.png)
 
-![compliance](reports/figures/fig_compliance.png)
+## 🏛 多 Teacher 古典散文
 
-## 模型
+五家强模型生成古典散文（记/序/论/传/说/赋/铭/书），**作家风格轮转**避免同质化，全部经四重过滤：
 
-| 模型 | 基座 | 训练 | 量化 | 状态 |
-|---|---|---|---|---|
-| `poetry-4b-v2` | Qwen3.5-4B | CPT 300 步 + SFT 600 步（含扩写数据） | Q4_K_M 2.58GB | ✅ Ollama 可用 |
-| `poetry-9b-v1` | Qwen3.5-9B | SFT 600 步（seq768, LoRA r32） | Q4_K_M ~5.2GB | ✅ LoRA 已训完，GGUF 导出中 |
-
-- 两个模型均采用 **bf16 LoRA**（r=64/32，all-linear）；Windows 上 bitsandbytes 4bit 极慢（~42 tok/s），故不用 QLoRA。
-- 训练显存：4B seq1024 定长 ≈ 15GB；9B seq768 定长 ≈ 22GB。
-
-## 数据
-
-| 语料 | 规模 | 用途 |
-|---|---|---|
-| 全唐诗 / 全宋诗 | 56,589 / 252,852 首 | 拟作 SFT、韵律统计 |
-| 宋词 / 元曲 | 21,053 / 11,057 | 词曲能力 |
-| 诗话 / 词话 / 文评 | 1,133 / 358 / 426 万字 | 评点、鉴赏 |
-| 明文海 / 明文衡 / 古文观止 / 清文精选 | 4,168 篇 / 354 万字 | 明清散文 |
-| 四库别集 | 1,279 部 / 471.6MB | CPT 扩充 |
-| **CPT 语料** | **382,191 条 / 6,033 万字** | 领域继续预训练 |
-| **SFT v3** | **40,813 条**（拟作 15k + 真实诗话 13k + teacher 评点 9k + 扩写 1.5k） | 指令微调 |
-| **古典散文（多 teacher）** | **2,780 条**（GLM-5.3 / K3.1-Pro / K3 / K2.8 / DeepSeek 生成，过滤后） | 明清古文能力 |
-| **SFT v4** | **46,261 条**（v3 + 散文加权 7,653） | 指令微调 v2 |
-| **DPO 偏好对** | **1,026 条正例**（5 家强模型）+ SFT 模型自生成负例 | 偏好对齐 |
-
-数据来源：`chinese-poetry`、`daizhigev20`、`Classical-Modern` 等公开语料（各自遵循原许可）。本仓库只放**样例数据**；完整数据与 LoRA adapter 发布在 HuggingFace。
-
-## 多 Teacher 古典散文数据
-
-五家强模型生成古典散文（记/序/论/传/说/赋/铭/书），作家风格轮转避免同质化，全部经质量过滤：
-
-- **抄袭检测**：与 313k 篇语料（1,709 万 8-gram 指纹）比对，重叠 >0.12 剔除
-- **现代词检测**：的/了/是 占比 >3% 剔除
-- **名篇黑名单**：滕王阁序 / 项脊轩志 / 兰亭集序 / 赤壁赋 等
-- **长度窗口**：150–800 字
+1. **抄袭检测**：313k 篇语料 / 1,709 万 8-gram 指纹，重叠 >0.12 剔除
+2. **现代词检测**：的/了/是 占比 >3% 剔除
+3. **名篇黑名单**：滕王阁序 / 项脊轩志 / 兰亭集序 / 赤壁赋
+4. **长度窗口**：150–800 字
 
 ![teachers](reports/figures/fig_teachers.png)
 
@@ -61,27 +114,14 @@
 | **GLM-5.3** | 800 | 788 | 质量与速度俱佳 |
 | **K3.1-Pro** | 200 | **200（100%）** | 议论最有力 |
 | **K3** | 200 | 194 | 稳定 |
-| K2.8 Preview | 600 | 573 | ⚠️ 18 条整段抄名篇（已剔除） |
-| DeepSeek-V4.1-Flash | 1,500 | 1,025 | ⚠️ 452 条被抄袭检测剔除 |
+| K2.8 Preview | 600 | 573 | ⚠️ 18 条整段抄名篇已剔除 |
+| DeepSeek-V4.1-Flash | 1,500 | 1,025 | ⚠️ 452 条抄袭被剔除 |
 
 ![data v4](reports/figures/fig_data_v4.png)
 
+## 📈 评测结果
 
-## 方法要点
-
-1. **CPT**：4B，seq2048 packing，LoRA r64，1e-4，300 步 ≈ 980 万 tokens，loss 3.6 → 2.36。
-2. **SFT 数据构建**：
-   - 由 30 万真实诗构造「风格标签 + 题目 + 体裁要求 → 原诗」拟作样本，**按作者切分**验证集防背诵；
-   - 真实诗话「引诗 + 评语」对 13k 条；
-   - DeepSeek-V4.1-Flash teacher 生成评点/鉴赏/仿写/扩写（1 万条 ≈ ¥111，扩写 400 条 ≈ ¥2.4）。
-3. **Windows 训练稳定性**：SFT 必须**定长 padding**；变长 batch 会导致 CUDA 分配器碎片化（reserved 27GB → OOM）。训练前需 `ollama stop`。
-4. **押韵评估**：从 139,408 首近体诗统计，拼音韵母完全一致仅 15.6%；按**数据驱动韵部簇**（36 韵母 → 9 簇，真实诗一致性 **86.5%**）判断更合理。
-5. **抄袭检测**：31.3 万篇语料 → **1,709 万 8-gram 指纹**（CRC32 + numpy），归一简繁；名篇原文可被识别（杜牧《秋夕》overlap 0.619）。
-6. **Best-of-N 生成**：按句数、句长、韵部、抄袭率打分选优；overlap>0.2 直接否决。
-
-## 结果
-
-### 体裁合规（2 采样/体裁，bf16）
+### 体裁合规（每体裁 2 采样，bf16）
 
 | 体裁 | 4B v2 句数/句长/押韵 | 9B v1 句数/句长/押韵 |
 |---|---|---|
@@ -90,44 +130,55 @@
 | 五律 | 1/2 · 1/2 · 1/2 | **2/2 · 2/2** · 1/2 |
 | 七律 | **2/2 · 2/2** · 2/2 | 1/2 · 1/2 · 1/2 |
 
-八类任务与语料 8-gram 重复均 ≤0.01（无背诵）。Q4 量化后押韵略有下降（4B: 0–1/2）。
+![compliance](reports/figures/fig_compliance.png)
 
-### 样例（9B，Best-of-N）
+### 长文扩写（381 字 → 1000 字，同一 prompt）
 
-> 九嵏峰頂倚危欄，萬里江天盡目寒。
-> 歸鴈不隨秦帝駕，殘蟬猶訴漢宮歡。
-> 山川不改英雄恨，日月無情壯士肝。
-> 回首故人多老矣，不堪煙雨寄征鞍。
+| 模型 | 输出字数 | 重复情况 |
+|---|---:|---|
+| 仅 CPT | 1,393 | 段落重复 |
+| SFT v1 | 940 | 大段复读 |
+| **SFT v2（+376 扩写数据）** | **1,101** | **0 重复段落 / 0 重复 20-gram** |
 
-更多见 [reports/best-pieces.md](reports/best-pieces.md)。
+![expansion](reports/figures/fig_expansion.png)
 
+### 抄袭检测有效性
 
-![gallery](reports/figures/gallery.png)
+- 杜牧《秋夕》原文 → overlap **0.619**（可识别）
+- 精选原创作品 → overlap **≤0.01**
 
-## 快速开始
+## 🕳 踩过的坑
 
-```powershell
-# Ollama 导入（已有 GGUF 时）
-ollama create poetry-4b-v2 -f .\scripts\Modelfile.poetry-4b-v2
-ollama run poetry-4b-v2 "【唐·王维·五绝·山水】请作五言绝句一首，写山中月夜。"
-```
+| 坑 | 结论 |
+|---|---|
+| **QLoRA 在 Windows 极慢** | bnb 4bit 仅 42 tok/s（bf16 是 1,500 tok/s），**不用 QLoRA** |
+| **变长 batch → CUDA 分配器碎片化** | alloc 10GB / reserved 27GB → OOM，**必须定长 padding** |
+| **DPO 参考策略搞错** | adapter-disable 拿到的是**基座**不是 SFT → loss 0.07 崩坏，**必须缓存 SFT 参考 logps** |
+| **批次生成提速 175 倍** | batch 1→24：0.0036/s → 0.63/s |
+| **K2.8 会抄名篇** | 整段照搬《师说》《山居秋暝》，必须指纹过滤 |
+| **K3.1-Pro 不能关思考** | 只能 `reasoning_effort=low`，temperature 固定 1.0 |
+| **MiniMax-M3.1-Flash 强制 adaptive** | 必须 `max_tokens≥6000`，慢 10 倍 |
 
-复现训练：见 [reports/reproduction-guide.md](reports/reproduction-guide.md)。
+## 📖 精选作品集
 
-## 局限
+18 页 PDF，含 9 篇作品 + 编者评点：[`qwen3.5-9B-诗文专家模型选.pdf`](reports/qwen3.5-9B-诗文专家模型选.pdf)
 
-- **格律放宽**：只校验句数/句长/押韵，不校验平仄（平水韵完整韵书未用）。
-- **Q4 量化损失**：押韵与句数稳定性下降，敏感场景建议用 bf16 adapter 或 Best-of-N。
-- **背诵风险**：训练数据含真实名篇，低步数时会复现名篇（已加入指纹检测与 Best-of-N 否决；9B 600 步后本集所选均 <0.01）。
-- **9B 显存**：24GB 卡只能 seq768；seq1024 会贴顶。
+论文草稿：[`paper-draft.pdf`](reports/paper-draft.pdf) — *Training Small Language Models for Classical Chinese Poetry and Prose: A Data-Centric Study with Evaluation Beyond Fluency*
 
-## 许可
+## 🔗 HuggingFace / GitHub
 
-- 代码：MIT
-- 模型：基座 Qwen3.5（Apache-2.0），LoRA adapter 将在 ModelScope/HF 发布
-- 语料：遵循各原始数据集许可（chinese-poetry、daizhigev20 等）
+- 🤗 模型（4B v2）: https://huggingface.co/Shokou1/qwen3.5-poetry-4b-v2
+- 🤗 模型（9B v1）: https://huggingface.co/Shokou1/qwen3.5-poetry-9b-v1
+- 🤗 数据集: https://huggingface.co/datasets/Shokou1/classical-poetry-sft
+- 💻 本仓库：脚本 / 报告 / 样例数据 / 论文
 
-## 引用
+> 大文件在 HF 上以 40MB 分片存放，仓库内附 `merge_chunks.py` 一键合并。
+
+## 📄 许可
+
+代码 MIT；模型基座 Qwen3.5（Apache-2.0）；数据遵循各原始语料许可。
+
+## 🙏 引用
 
 ```bibtex
 @misc{classicalpoetrylm2026,
@@ -137,3 +188,4 @@ ollama run poetry-4b-v2 "【唐·王维·五绝·山水】请作五言绝句一�
   url    = {https://github.com/ShokouP/classical-poetry-lm}
 }
 ```
+
