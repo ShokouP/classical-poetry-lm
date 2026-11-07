@@ -170,6 +170,30 @@ Ollama / DSH / llama.cpp
 - 杜牧《秋夕》原文 → overlap **0.619**（可识别）
 - 精选原创作品 → overlap **≤0.01**
 
+
+### DSH 接入注意（工具调用）
+
+DSH 的 agent system prompt + 工具 schema 很容易超过 **32K tokens**。
+Ollama 在 prompt 超过 `num_ctx` 时直接返回 **HTTP 400**，表现为「模型不能用工具」。
+
+实测（2026-11-08）：
+- `poetry-9b-v7`（num_ctx 32768）→ 46,698 token prompt → **HTTP 400**
+- `poetry-9b-v7-agent`（num_ctx 65536）→ 同 prompt → 正常 tool_call，两轮闭环正常，显存 6.8GB
+
+```bash
+# 建 64K 上下文的 agent 变体
+cat > v7-agent.Modelfile <<'EOF'
+FROM D:\train\models\poetry-9b-v7-Q4_K_M.gguf
+PARAMETER num_ctx 65536
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+PARAMETER repeat_penalty 1.05
+EOF
+ollama create poetry-9b-v7-agent -f v7-agent.Modelfile
+```
+
+DSH 配置（`cordis.patch.yml`）里选 `poetry-9b-v7-agent`（contextWindow 65536 / maxTokens 8192）。
+
 ## 🕳 踩过的坑
 
 | 坑 | 结论 |
