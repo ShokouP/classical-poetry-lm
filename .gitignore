@@ -1,0 +1,12 @@
+*.safetensors
+*.gguf
+*.pt
+*.bin
+*.npy
+!data-samples/*.jsonl
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.log

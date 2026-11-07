@@ -1,0 +1,10 @@
+$vpy = "D:\train\venv\Scripts\python.exe"
+$log = "D:\train\runs\post_9b.log"
+function L($m){ "$(Get-Date -Format "HH:mm:ss") $m" | Tee-Object -FilePath $log -Append }
+$env:NO_PROXY=""; $env:no_proxy=""; $env:HTTPS_PROXY=""; $env:HTTP_PROXY=""
+L "POST_9B_START"
+& $vpy "D:\train\scripts\eval_model.py" --base "D:\train\models\Qwen3.5-9B" --adapter "D:\train\models\sft_9b_v1" --out "D:\train\runs\eval_9b_fp.json" *> "D:\train\runs\eval_9b_fp.log"
+L "EVAL_EXIT=$LASTEXITCODE"
+& $vpy "D:\train\scripts\gen_bestofn.py" --base "D:\train\models\Qwen3.5-9B" --adapter "D:\train\models\sft_9b_v1" --n 4 --out "D:\train\runs\gen_bestofn_9b.json" *> "D:\train\runs\gen_bestofn_9b.log"
+L "BESTOFN_EXIT=$LASTEXITCODE"
+L "POST_9B_DONE"
