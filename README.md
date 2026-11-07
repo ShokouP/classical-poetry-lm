@@ -6,6 +6,18 @@
 
 > 精选作品集： [`reports/qwen3.5-9B-诗文专家模型选.pdf`](reports/qwen3.5-9B-诗文专家模型选.pdf)（18 页，含编者评点）
 
+## HuggingFace
+
+- 模型（4B v2）: https://huggingface.co/Shokou1/qwen3.5-poetry-4b-v2
+- 模型（9B v1）: https://huggingface.co/Shokou1/qwen3.5-poetry-9b-v1
+- 数据集: https://huggingface.co/datasets/Shokou1/classical-poetry-sft
+
+> 模型权重在 HF 上以 40MB 分片存放（网络原因），仓库内附 `merge_chunks.py` 一键合并。
+
+![pipeline](reports/figures/fig_pipeline.png)
+
+![compliance](reports/figures/fig_compliance.png)
+
 ## 模型
 
 | 模型 | 基座 | 训练 | 量化 | 状态 |
