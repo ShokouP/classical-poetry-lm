@@ -1,6 +1,10 @@
 # 🏮 一张消费级显卡，炼出一个会写唐诗宋词的 AI
 
 > **TL;DR**：用 **RTX 5090 Laptop（24GB）** 在 **Windows 原生环境**上，把 Qwen3.5 训成会写**近体诗、词、明清古文、骚体赋**的模型。
+
+> 🆕 **2026-11-08：发布 `poetry-9b-v7`** —— 绝句「4 句格式 + 押韵」双 4/4，8-gram 抄袭 0.00。
+> 模型：https://huggingface.co/Shokou1/qwen3.5-poetry-9b-v7 · Release：https://github.com/ShokouP/classical-poetry-lm/releases/tag/v0.2.0
+
 > 全程开源：**30 万首真诗**训练数据 → CPT → SFT → **5 家最强模型当老师**生成古典散文 → 偏好对齐 → 量化部署，**总花费不到 ¥150 API 费**。
 
 [![GitHub stars](https://img.shields.io/github/stars/ShokouP/classical-poetry-lm?style=social)](https://github.com/ShokouP/classical-poetry-lm)
