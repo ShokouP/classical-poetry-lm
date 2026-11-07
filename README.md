@@ -65,8 +65,27 @@ model = PeftModel.from_pretrained(model, "Shokou1/qwen3.5-poetry-9b-v1")
 |---|---|---|---|---|
 | `poetry-4b-v2` | Qwen3.5-4B | CPT 300 + SFT 600（含扩写） | Q4_K_M 2.58GB | ✅ |
 | `poetry-9b-v1` | Qwen3.5-9B | SFT 600（seq768, r32） | Q4_K_M 5.24GB | ✅ |
-| `poetry-9b-v2` | Qwen3.5-9B | SFT 280（+散文 7.6k） | — | 待导出 |
-| `poetry-9b-dpo` | Qwen3.5-9B | SFT + DPO 200 | — | 训练中 |
+| **`poetry-9b-v7`** | Qwen3.5-9B | **SFT 格式修复 → 押韵 SFT（真实绝句 6000）→ GRPO v7（8 prompt × G8）** | Q4_K_M 5.6GB | **✅ 最新** |
+
+### format & rhyme compliance（4 个绝句 prompt）
+
+| 模型 | 4 句格式 | 押韵（第 2/4 句同韵部） | 8-gram 抄袭 |
+|---|---:|---:|---:|
+| sft_v2 | 2/4 | — | — |
+| dpo2 | 0/4 ❌ | — | — |
+| fmt_sft | **4/4** | 4/4 | 1 条抄《鹿柴》❌ |
+| **grpo_v7** | **4/4** | **4/4** | **0.00 ✅** |
+
+![compliance v2](reports/figures/fig_compliance_v2.png)
+
+**poetry-9b-v7 实测输出**（Ollama）：
+
+```
+月出山欲空，清光落寒松。
+幽人独对此，不觉夜来钟。
+```
+
+> 五绝 · 4 句 × 5 字 · 「空/松/钟」同韵 · 8-gram 重叠 0.00
 
 | 数据 | 规模 |
 |---|---:|
