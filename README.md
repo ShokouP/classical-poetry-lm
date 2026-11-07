@@ -76,6 +76,9 @@
 
 更多见 [reports/best-pieces.md](reports/best-pieces.md)。
 
+
+![gallery](reports/figures/gallery.png)
+
 ## 快速开始
 
 ```powershell
